@@ -1,0 +1,153 @@
+---
+title: "iSSA Evaluation"
+author: "Brian J. Smith"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background
+
+Understanding the drivers and consequences of animal movement is the primary goal of movement ecologists. As animals move through space, they experience changing environmental conditions, acquire necessary resources, and avoid risk -- how they respond should ultimately affect their fitness but depends both on the habitat and the animals' movement capacity. Integrated-step-selection analysis (iSSA) is a recently developed statistical approach for simultaneously estimating both the movement-free habitat selection process and the selection-free movement process. iSSA has been used, for example, to examine how animals change their habitat selection and movement behavior in response to predation risk, roads, human recreation, management actions, and protected areas.
+
+While iSSA has become popular for making inference about animal habitat use and movement, there is no consensus on how to evaluate a fitted model. iSSAs use conditional logistic regression as a fitting "trick" to approximate the parameters of the underlying model of interest, a discrete-time biased correlated random walk (BCRW). The resulting model predictions are not themselves interpretable, since different parameters in the model may pertain to either the habitat selection kernel or adjustments to the selection-free movement kernel. A goodness-of-fit metric for such a model -- for example, a likelihood-based pseudo-R^2^ -- is thus not easily interpreted.
+
+Here, we outline and examine 8 metrics for evaluating an iSSA. These metrics are either (1) standard conditional logistic regression/proportional hazards metrics, (2) based on the probability of selecting the used step given the underlying iSSA model, (3) based on simulating space use from a fitted iSSA, or (4) based on the used habitat characteristics.
+
+# Terminology
+
+-   "Step" -- a straight line connection between two consecutive locations with a given (constant) time duration between locations.
+
+-   "Integrated Step Selection Analysis (iSSA)" -- a statistical analysis framework that leverages linear regression (typically conditional logistic regression or mixed Poisson regression) to estimate the parameters of a mechanistic movement model (a biased correlated random walk) by matching observed steps with available steps generated from a tentative movement distribution.
+
+-   "Integrated Step Selection Function (iSSF)" -- a single fitted function under the iSSA framework.
+
+-   "Tentative movement distribution" -- the distribution from which available steps are drawn for an iSSA. It is typically composed of independent step-length and turn-angle distributions. The parameters of the tentative movement distribution are often estimated from the observed movement distribution.
+
+-   "Movement-free selection kernel", $w$ -- the function that defines the probability that a step ends in a given location, unconditional on the movement process. Here we will assume that this is given by the exponential habitat selection function, $w(x) = exp(\beta_1 h_1(x) + ... + \beta_j h_j(x))$, where $x$ is a location in environmental space (*i.e.*, a habitat) and $h_j(x)$ is the value of the *j^th^* habitat variable at location $x$.
+
+-   "Selection-free movement kernel", $\phi$ -- a function that returns the probability that a step ends in a given location, conditional on the start location of the step and its duration, but unconditional on the habitat selection process. Here, we will assume that this is given as the product of an independent step-length distribution and turn-angle distribution. We will use a gamma distribution for step lengths and a von Mises distribution for turn angles. The selection-free movement kernel is estimated by updating the tentative movement distribution using the fitted movement parameters of an iSSF.
+
+-   "Redistribution kernel", $u$ -- a function that returns the probability that a step ends in a given location, conditional on the movement-free selection kernel and the selection-free movement kernel. It is the normalized product of $w$ and $\phi$. Importantly, for a set of steps generated from the tentative movement distribution, the exponentiated linear predictor under an iSSF is proportional to the redistribution kernel (which we will refer to as the risk prediction in the parlance of Cox PH models).
+
+# Metrics
+
+## Standard Proportional Hazards Metrics
+
+These metrics are the least connected to the underlying BCRW of the iSSA, but we provide an interpretation where possible.
+
+### Concordance
+
+Concordance is a standard statistic used to evaluate conditional logistic regression and Cox proportional hazards models. It is a generalization of AUC to a the stratified case, and if applied to an ordinary logistic regression, returns the AUC statistic exactly. This value can be calculated in `R` for an object of class `coxph` with `survival::concordance()` and also appears in `summary.coxph()` by default.
+
+Concordance can be interpreted as the probability that the used step has a greater value of the model risk prediction than a randomly selected available step from the same stratum.
+
+### Coefficient of Determination
+
+This is the Cox-Snell pseudo-R^2^. It is defined as:
+
+$$R^2 = 1 - exp\left(\frac{2}{n} L_0 - L_1\right)$$
+
+where $L_0$ is the log-likelihood for the null model, $L_1$ is the log-likelihood for the fitted model, and $n$ is the total number of observations. Note that $n$ is the total number of used and available steps, and this statistic is sensitive to the number of available steps chosen by the analyst.
+
+> Nagelkerke NJD, 1991. A Note on a General Definition of the Coefficient of Determination. Biometrika 78(3):691--92.
+
+Can be calculated with `survMisc::rsq()`.
+
+### Measure of explained randomness
+
+This is the Cox-Snell pseudo-R^2^, but with the number of "events" rather than the total number of data rows. *I.e.*, it depends on the number of strata (used steps) rather than the number of used and available steps. It is defined as:
+
+$$R^2_{mer} = 1 - exp\left(\frac{2}{m} L_0 - L_1\right)$$
+
+where $m$ is the number of used steps.
+
+> O'Quigley J, Xu R, Stare J, 2005. Explained randomness in proportional hazards models. Stat Med 24(3):479--89.
+
+Can be calculated with `survMisc::rsq()`.
+
+### Measure of explained variation
+
+$$R^2_{mev} = \frac{R^2_{mer}}{R^2_{mer} + \frac{\pi}{6}(1 - R^2_{mer})}$$
+
+> Royston P, 2006. Explained variation for survival models. The Stata Journal 6(1):83--96.
+
+*I need to read Royston to figure out exactly what this means.*
+
+Can be calculated with `survMisc::rsq()`.
+
+## Metrics based on used and available steps
+
+### Average rank
+
+An iSSA with perfect predictive ability would always rank the used step higher than any of the available steps.
+
+For an iSSA fit with $n_a$ available steps per stratum, each step in the stratum is ranked from $\{1, ..., (n_a + 1)\}$ using the fitted model risk predictions. The step ranked 1 is least likely to be selected under the model and the step ranked $(n_a + 1)$ is most likely to be selected under the model. Let $r_u$ be the rank of the used step. The statistic for a single stratum is:
+
+$$\frac{r_u}{(n_a + 1)}$$
+
+When the used step is ranked highest, $r_u/(n_a + 1) = (n_a + 1)/(n_a + 1) = 1$.
+
+When the used step is ranked lowest, the statistic evaluates to $1/(n_a + 1)$. Note that as $n_a \rightarrow \infty$, the statistic approaches 0. Thus this metric is bound between 0 and 1. Values closer to 1 indicate better predictive ability.
+
+The statistic for an iSSF is the mean across all strata (and note that SE can be calculated for this mean).
+
+### RSS vs top ranked
+
+Relative selection strength (RSS), is how many times more likely an organism is to select one step over another, conditional on the starting location. *I.e.*, it is the ratio of the redistribution kernel for two end points, which is equivalent to the ratio of the risk prediction for two sampled steps within a stratum.
+
+Using the same logic as the rank of the used step, an iSSA with perfect predictive ability should have the greatest risk prediction for the used step. The statistic for a single stratum takes the ratio of the risk prediction for the highest-ranked step over the risk prediction for the used step. Let $x^*$ be the step in the stratum (used or available) with the highest value of the risk prediction ($p(x)$). Let $x_u$ be the used step in the stratum. The statistic is given by:
+
+$$RSS(x_u, x^*) = \frac{p(x_u)}{p(x^*)}$$
+
+If the used step is the step with the highest value of the risk prediction, then: $RSS(x_u, x^*) = p(x_u)/p(x^*) = p(x_u)/p(x_u) = 1$. As $p(x^*)$ becomes much larger than $p(x_u)$, then $RSS(x^*, x_u) \rightarrow 0$.
+
+The statistic is thus bound between 0 and 1. The numeric value is directly interpretable as how many times less likely the animal is to select the used step in the stratum over the "best" step in the stratum.
+
+The statistic for an iSSF is the mean across all strata (and note that SE can be calculated for this mean).
+
+## Metrics based on simulated UDs
+
+The two previous sections of metrics, the standard proportional hazards statistics or the metrics based on used and available steps, both rely on the sampled available steps to evaluate the model. An alternative approach is to compare the emergent space-use pattern under the model to the space-use pattern in the raw location data.
+
+These metrics compare the occurrence distribution (OD) under the model to the OD in the data. We estimate the OD from the data using the approach of Schlägel et al. (2019). We estimate the OD from the model by simulating a large number of tracks from the fitted iSSF, calculating an OD for each one, and then taking the mean.
+
+Schlägel, U.E., Signer, J., Herde, A., Eden, S., Jeltsch, F., Eccard, J.A., et al. (2019). Estimating interactions between individuals from concurrent animal movements. Methods Ecol. Evol., 10, 1234--1245.
+
+### Sim BA
+
+The first way to compare the observed and simulated OD is by using Bhattacharyya's Affinity (BA). Using BA to compare observed and simulated ODs for iSSF fitting was proposed by Potts et al. (2022).
+
+> Potts, J.R., Börger, L., Strickland, B.K. & Street, G.M. (2022). Assessing the predictive power of step selection functions: how social and environmental interactions affect animal space use. Methods Ecol. Evol., 1--39.
+
+### Sim R
+
+Another way to compare the observed and simulated OD is by comparing how well they rank raster cells using Spearman's correlation coefficient. This is conceptually similar to the method of Boyce et al. (2002), which used Spearman's correlation to evaluate an HSF model.
+
+> Boyce, M.S., Vernier, P.R., Nielsen, S.E. & Schmiegelow, F.K.A. (2002). Evaluating resource selection functions. Ecol. Modell., 157, 281--300.
+
+## Metrics based on used-habitat characteristics
+
+Fieberg et al. (2018) developed Used-Habitat Calibration (UHC) plots as a graphical method for evaluating fitted HSFs and iSSFs. We propose a set of metrics that quantify the similarity between the observed and predicted density curves in UHC plots.
+
+### UHC BA
+
+The first metric uses Bhattacharyya's Affinity (BA) to measure the similarity between the observed and predicted density curves.
+
+### UHC R
+
+The second metric uses Spearman's correlation to measure the correlation between ranks along each habitat axis.
+
+# Methods
+
+## Simulated Habitat
+
+## Simulated Track
+
+# Results
