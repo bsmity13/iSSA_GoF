@@ -18,7 +18,7 @@ full_formula <- function(f) {
 # Function to simulate
 sim_track <- function(w, tent, start_loc, start_t,
                       n_avail, T, delta_t = "1 hour") {
-
+  
   # Create template data.frame
   d <- data.frame(x = rep(NA, T),
                   y = NA,
@@ -28,12 +28,12 @@ sim_track <- function(w, tent, start_loc, start_t,
   # Fill in start location
   d$x[1] <- start_loc[1]
   d$y[1] <- start_loc[2]
-
+  
   # Generate first step
   # Assume first step goes straight north by mean tentative step length
   d$x[2] <- d$x[1]
   d$y[2] <- d$y[1] + (tent$shp * tent$scl)
-
+  
   # Generate remaining steps
   for (t in 3:T) {
     # Print status
@@ -48,24 +48,24 @@ sim_track <- function(w, tent, start_loc, start_t,
       ta_circ <- circular::rvonmises(n = n_avail, mu = tent$mu, kappa = tent$kappa)
       tas <- ifelse(ta_circ > pi, ta_circ - 2*pi, ta_circ)
     })
-
+    
     # Figure out where it lands
     abs_angles <- (abs_prev + tas) %% (2*pi)
     dx <- cos(abs_angles) * sls
     dy <- sin(abs_angles) * sls
     cand_x <- d$x[t-1] + dx
     cand_y <- d$y[t-1] + dy
-
+    
     # Extract w(x) for each candidate step endpoint
     ws <- extract(w, cbind(cand_x, cand_y))
     # Set any NAs to 0 (hopefully unlikely)
     ws[is.na(ws)] <- 0
     # Normalize
     weight <- ws/sum(ws)
-
+    
     # Sample step
     step_id <- sample.int(length(weight), size = 1, prob = weight)
-
+    
     # Keep new location
     d$x[t] <- cand_x[step_id]
     d$y[t] <- cand_y[step_id]
@@ -184,28 +184,39 @@ mev <- function(x){
 }
 
 # Scaled rank of used step
-srus <- function(x) {
-  # Get data
-  D <- x$model$model
-  # Predict "risk"
-  D$risk <- predict(x$model, type = "risk")
-  # Easier column to find used
-  D$used <- as.character(D[, 1]) == "1"
-  # Split data by stratum
-  D_sp <- split(D, D$`strata(step_id_)`)
+# Out-of-sample concordance
+oos_concord <- function(x, step_data, hab, nsteps = 100) {
+  # Get tentative distributions
+  sl <- amt::sl_distr(x)
+  ta <- amt::ta_distr(x)
+  
+  # Simulate new available steps under the tentative distribution
+  s <- step_data %>% 
+    random_steps(n_control = nsteps,
+                 sl_distr = sl,
+                 ta_distr = ta) %>% 
+    filter(step_id_ > 1) %>% 
+    extract_covariates(hab) %>% 
+    mutate(cover = factor(cover))
+  
+  # Predict redistribution kernel, "risk" prediction
+  s$risk <- predict(x$model, type = "risk", newdata = s)
+  
+  # Split by stratum
+  s_sp <- split(s, s$step_id_)
+  
   # Rank
-  D_sp <- lapply(D_sp, function(dd) {
+  s_sp <- lapply(s_sp, function(dd) {
     dd$rank <- rank(dd$risk)
     return(dd)
   })
   # Used ranks
-  used_ranks <- unlist(
-    lapply(D_sp, function(x) {
-      x$rank[which(x$used)]
-    })
-  )
+  used_ranks <- sapply(s_sp, function(x) {
+    x$rank[which(x$case_)]
+  })
+  
   # Total steps (in case some steps had NAs)
-  tot_steps <- unlist(lapply(D_sp, nrow))
+  tot_steps <- sapply(s_sp, nrow)
   
   # Metric to return
   scaled_rank <- used_ranks/tot_steps
@@ -214,28 +225,42 @@ srus <- function(x) {
   return(mean(scaled_rank))
 }
 
-rss_v_top <- function(x) {
-  # Get data
-  D <- x$model$model
-  # Predict "risk"
-  D$risk <- predict(x$model, type = "risk")
-  # Easier column to find used
-  D$used <- as.character(D[, 1]) == "1"
-  # Split data by stratum
-  D_sp <- split(D, D$`strata(step_id_)`)
-  # Risk prediction for used 
-  risk_used <- unlist(
-    lapply(D_sp, function(x) {
-      x$risk[which(x$used)]
-    })
-  )
+rss_v_top <- function(x, step_data, hab, nsteps = 100) {
+  # Get tentative distributions
+  sl <- amt::sl_distr(x)
+  ta <- amt::ta_distr(x)
+  
+  # Simulate new available steps under the tentative distribution
+  s <- step_data %>% 
+    random_steps(n_control = nsteps,
+                 sl_distr = sl,
+                 ta_distr = ta) %>% 
+    filter(step_id_ > 1) %>% 
+    extract_covariates(hab) %>% 
+    mutate(cover = factor(cover))
+  
+  # Predict redistribution kernel, "risk" prediction
+  s$risk <- predict(x$model, type = "risk", newdata = s)
+  
+  # Split by stratum
+  s_sp <- split(s, s$step_id_)
+  
+  # Rank
+  s_sp <- lapply(s_sp, function(dd) {
+    dd$rank <- rank(dd$risk)
+    return(dd)
+  })
+  
+  # Used ranks
+  risk_used <- sapply(s_sp, function(x) {
+    x$risk[which(x$case_)]
+  })
+  
   # Risk prediction for max
-  risk_max <- unlist(
-    lapply(D_sp, function(x) {
-      # Add [1] in case there are ties for the top risk
-      x$risk[which(x$risk == max(x$risk))[1]]
+  risk_max <- sapply(s_sp, function(x) {
+      max(x$risk, na.rm = TRUE)
     })
-  )
+  
   # RSS
   rss <- risk_used/risk_max
   # Return

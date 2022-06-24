@@ -30,6 +30,9 @@ loc_ods <- locs %>%
       od(trast = hab[[1]])
   })
 
+# # SAVE
+# saveRDS(loc_ods, "out/loc_ods.rds")
+
 # Create simulated ODs ----
 # Takes about 10h with n_sim = 25
 system.time({
@@ -43,8 +46,10 @@ system.time({
   })
 })
 
-# SAVE
-saveRDS(sim_ods, "out/sim_ods.rds")
+# # SAVE
+# saveRDS(sim_ods, "out/sim_ods.rds")
+# LOAD
+sim_ods <- readRDS("out/sim_ods.rds")
 
 # Attach ODs to dat ----
 dat$obs_od <- lapply(1:nrow(dat), function(r) {

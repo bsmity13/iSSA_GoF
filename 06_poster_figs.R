@@ -194,18 +194,19 @@ res_fig <- mets %>%
                values_to = "fit") %>% 
   mutate(metric = factor(metric, 
                          levels = names(mets)[3:ncol(mets)],
-                         labels = c("Concord", "COD", "MER", "MEV",
-                                    "SRUS", "RSS v Top", "Obs v Sim BA",
-                                    "Obs v Sim R"))) %>% 
+                         labels = c("Concord", "MER", "OOS-C", "RSS v Top", 
+                                    "ODBA",
+                                    "ODR"))) %>% 
   ggplot(aes(x = beta, y = fit, color = model)) +
   facet_wrap(~ metric) +
   geom_line(size = 1) +
   xlab(expression(beta)) +
   ylab("Metric") +
-  scale_color_discrete(name = "Model",
+  scale_color_brewer(name = "Model",
                        breaks = levels(mets$model),
                        labels = c("Full", "Rdcd1", "Rdcd2", 
-                                  "Rdcd3", "Wrong")) +
+                                  "Rdcd3", "Wrong"),
+                       palette = "BrBG") +
   coord_cartesian(ylim = c(0, 1)) +
   theme_bw() +
   theme(text = element_text(size = 25),
@@ -213,5 +214,5 @@ res_fig <- mets %>%
   NULL
 
 ggsave("fig/poster/main_result.tiff", plot = res_fig,
-       width = 10, height = 12.5, units = "in",
+       width = 10, height = 8, units = "in",
        dpi = 300, compression = "lzw", device = agg_tiff, bg = "green")

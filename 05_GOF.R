@@ -26,20 +26,29 @@ names(hab) <- c("forage", "pred", "cover", "dist_to_cent", "wrong")
 # Concordance
 dat$concord <- sapply(dat$issf, concordance)
 
-# Coefficient of Determination
-dat$cod <- sapply(dat$issf, cod)
+# # Coefficient of Determination
+# dat$cod <- sapply(dat$issf, cod)
 
 # Measure of Explained Randomness
 dat$mer <- sapply(dat$issf, mer)
 
-# Measure of Explained Variation
-dat$mev <- sapply(dat$issf, mev)
+# # Measure of Explained Variation
+# dat$mev <- sapply(dat$issf, mev)
 
+# OOS Concordance
 # Average rank of used step
-dat$srus <- sapply(dat$issf, srus)
+dat$oos_c <- mapply(oos_concord, 
+                    x = dat$issf, 
+                    step_data = dat$steps, 
+                    MoreArgs = list(hab = hab, 
+                                    nsteps = 100))
 
 # RSS vs Top
-dat$rssvt <- sapply(dat$issf, rss_v_top)
+dat$rssvt <- mapply(rss_v_top, 
+                    x = dat$issf, 
+                    step_data = dat$steps, 
+                    MoreArgs = list(hab = hab, 
+                                    nsteps = 100))
 
 # Observed vs Simulated using BA
 dat$os_ba <- mapply(os_ba, dat$obs_od, dat$sim_od)

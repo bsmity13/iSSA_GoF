@@ -44,21 +44,34 @@ dat$f <- lapply(1:nrow(dat), function(r) {
 })
 
 # Format data ----
-dat$issf <- lapply(1:nrow(dat), function(r) {
+dat$steps <- lapply(1:nrow(dat), function(r) {
   # Status
   cat(r, "of", nrow(dat), "\n")
   # Get the row
   RR <- dat[r, ]
   # Get the location data
   loc <- locs %>% 
-    filter(sim == paste0("beta", RR$beta))
+    filter(sim == paste0("beta", RR$beta)) %>% 
+    # Format steps
+    make_track(x, y, t, crs = 32612) %>% 
+    steps()
+  # Return
+  return(loc)
+})
+
+# Fit model ----
+dat$issf <- lapply(1:nrow(dat), function(r) {
+  # Status
+  cat(r, "of", nrow(dat), "\n")
+  # Get the row
+  RR <- dat[r, ]
+  # Get the steps
+  stp <- RR$steps[[1]]
   # Get the model formula
   f <- full_formula(dat$f[[r]])
   # Fit the model
   set.seed(123 + r)
-  m <- loc %>% 
-    make_track(x, y, t, crs = 32612) %>% 
-    steps() %>% 
+  m <- stp %>%  
     random_steps(n_control = 20) %>% 
     filter(step_id_ > 1) %>% 
     extract_covariates(hab) %>% 
@@ -66,7 +79,7 @@ dat$issf <- lapply(1:nrow(dat), function(r) {
     fit_issf(f, model = TRUE)
   # Return
   return(m)
-  })
+})
 
 # Compare to truth ----
 true <- data.frame(term = c("forage", "pred", "cover2", "cover3", "dist_to_cent"),
@@ -85,4 +98,4 @@ dat$hs_true <- lapply(1:nrow(dat), function(i) {
 
 # Save ----
 # Data
-saveRDS(dat, "issf_fits.rds")
+saveRDS(dat, "out/issf_fits.rds")
